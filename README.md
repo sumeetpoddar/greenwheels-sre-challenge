@@ -54,6 +54,10 @@ docker compose logs -f api postgres
 ```
 
 For incident triage steps, see [RUNBOOK.md](./RUNBOOK.md).
+For the proposed four-engineer on-call and escalation model, see
+[ONCALL.md](./ONCALL.md).
+For the scale-exercise design (Kafka, RDS read scaling, caching, lag recovery,
+and ECS deployment reliability), see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 Stop the services without deleting persistent data:
 
