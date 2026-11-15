@@ -1,0 +1,81 @@
+
+groups:
+  # --------------------------------------------------
+  # API AVAILABILITY SLI
+  # --------------------------------------------------
+  - name: greenwheels_api_availability
+    interval: 30s
+    rules:
+      - record: greenwheels:api_availability:ratio_rate30d
+        expr: |
+          1 -
+          (
+            (
+              sum(increase(http_requests_total{status_code=~"5.."}[30d]))
+              or vector(0)
+            )
+            /
+            sum(increase(http_requests_total{status_code!~"4.."}[30d]))
+          )
+
+  # --------------------------------------------------
+  # API LATENCY SLI
+  # --------------------------------------------------
+  - name: greenwheels_api_latency
+    interval: 30s
+    rules:
+      - record: greenwheels:api_latency:compliance_ratio_rate30d
+        expr: |
+          sum(
+            increase(
+              http_request_duration_seconds_bucket{le="0.3"}[30d]
+            )
+          )
+          /
+          sum(
+            increase(
+              http_request_duration_seconds_count[30d]
+            )
+          )
+
+  # --------------------------------------------------
+  # EVENT PROCESSING SUCCESS SLI
+  # --------------------------------------------------
+  - name: greenwheels_event_processing
+    interval: 30s
+    rules:
+      - record: greenwheels:events:success_ratio_rate30d
+        expr: |
+          (
+            sum(increase(lease_events_processed_total[30d]))
+            or vector(0)
+          )
+          /
+          (
+            sum(increase(lease_events_received_total[30d]))
+            -
+            (
+              sum(increase(lease_events_duplicate_total[30d]))
+              or vector(0)
+            )
+          )
+
+  # --------------------------------------------------
+  # EVENT INGESTION LATENCY
+  # --------------------------------------------------
+  - name: greenwheels_event_ingestion_latency
+    interval: 30s
+    rules:
+      - record: greenwheels:events:latency_compliance_ratio_rate30d
+        expr: |
+          sum(
+            increase(
+              lease_event_processing_duration_seconds_bucket{le="0.5"}[30d]
+            )
+          )
+          /
+          sum(
+            increase(
+              lease_event_processing_duration_seconds_count[30d]
+            )
+          )

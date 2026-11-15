@@ -2,7 +2,10 @@
 from prometheus_client import Counter, Histogram
 
 
-# Total HTTP requests received by the API.
+# --------------------------------------------------
+# HTTP REQUEST METRICS
+# --------------------------------------------------
+
 HTTP_REQUESTS = Counter(
     "http_requests_total",
     "Total number of HTTP requests",
@@ -10,31 +13,69 @@ HTTP_REQUESTS = Counter(
 )
 
 
-# HTTP request latency in seconds.
 HTTP_REQUEST_DURATION = Histogram(
     "http_request_duration_seconds",
     "HTTP request latency in seconds",
     ["method", "endpoint"],
-    buckets=(0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 2.5, 5.0),
+    buckets=(
+        0.05,
+        0.1,
+        0.2,
+        0.3,
+        0.5,
+        1.0,
+        2.5,
+        5.0,
+    ),
 )
 
 
-# Total lease events accepted by the API.
+# --------------------------------------------------
+# LEASE EVENT METRICS
+# --------------------------------------------------
+
 LEASE_EVENTS_RECEIVED = Counter(
     "lease_events_received_total",
-    "Total number of lease events received",
+    "Total valid lease event ingestion attempts",
 )
 
 
-# Total lease events successfully processed.
 LEASE_EVENTS_PROCESSED = Counter(
     "lease_events_processed_total",
-    "Total number of lease events successfully processed",
+    "Total lease events successfully persisted and processed",
 )
 
 
-# Total lease events that failed processing.
 LEASE_EVENTS_FAILED = Counter(
     "lease_events_failed_total",
-    "Total number of lease events that failed processing",
+    "Total lease event processing attempts that failed unexpectedly",
+)
+
+
+LEASE_EVENTS_DUPLICATE = Counter(
+    "lease_events_duplicate_total",
+    "Total duplicate lease event submissions rejected with HTTP 409",
+)
+
+
+# --------------------------------------------------
+# EVENT PROCESSING LATENCY
+# --------------------------------------------------
+
+LEASE_EVENT_PROCESSING_DURATION = Histogram(
+    "lease_event_processing_duration_seconds",
+    "Time taken to persist and process a lease event ingestion attempt",
+    buckets=(
+        0.01,
+        0.025,
+        0.05,
+        0.1,
+        0.25,
+        0.5,
+        1.0,
+        2.5,
+        5.0,
+        10.0,
+        30.0,
+    ),
 )

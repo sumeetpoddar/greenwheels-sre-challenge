@@ -1,9 +1,13 @@
-
-
 fastapi==0.115.12
 uvicorn[standard]==0.34.0
 pydantic-settings==2.8.1
 prometheus-client==0.21.1
+
+# Database
+SQLAlchemy>=2.0,<3.0
+psycopg[binary]>=3.2,<4.0
+
+# Testing and linting
 pytest==8.3.5
 httpx==0.28.1
 ruff==0.11.2

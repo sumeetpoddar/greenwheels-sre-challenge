@@ -1,0 +1,154 @@
+
+groups:
+  # --------------------------------------------------
+  # API AVAILABILITY AND ERROR RATE ALERTS
+  # --------------------------------------------------
+  - name: greenwheels_api_alerts
+    interval: 30s
+    rules:
+
+      # Short-window alert for immediate incident detection
+      - alert: GreenwheelsAPIHigh5xxRate
+        expr: |
+          (
+            sum(rate(http_requests_total{
+              job="greenwheels-api",
+              status_code=~"5.."
+            }[5m]))
+            /
+            sum(rate(http_requests_total{
+              job="greenwheels-api"
+            }[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: greenwheels-api
+        annotations:
+          summary: "Greenwheels API has a high 5xx error rate"
+          description: |
+            More than 5% of API requests returned HTTP 5xx
+            responses over the last 5 minutes, sustained for
+            5 minutes. Investigate application logs, PostgreSQL
+            connectivity, resource saturation and recent deployments.
+          runbook: "RUNBOOK.md"
+
+      # Rolling 30-day availability SLO alert
+      - alert: GreenwheelsAPIHighErrorRate
+        expr: |
+          (
+            1 - greenwheels:api_availability:ratio_rate30d
+          ) > 0.001
+        for: 5m
+        labels:
+          severity: critical
+          service: greenwheels-api
+        annotations:
+          summary: "Greenwheels API availability SLO is breached"
+          description: |
+            API error rate has exceeded the 0.1% error budget
+            threshold over the rolling 30-day measurement window.
+            Investigate HTTP 5xx responses, application logs,
+            database connectivity and recent deployments.
+          runbook: "RUNBOOK.md"
+
+      # --------------------------------------------------
+      # API LATENCY ALERT
+      # --------------------------------------------------
+
+      - alert: GreenwheelsAPIHighLatency
+        expr: |
+          greenwheels:api_latency:compliance_ratio_rate30d < 0.95
+        for: 10m
+        labels:
+          severity: warning
+          service: greenwheels-api
+        annotations:
+          summary: "Greenwheels API latency SLO is breached"
+          description: |
+            Fewer than 95% of API requests completed within
+            the 300ms latency objective over the rolling
+            30-day measurement window.
+            Investigate database query latency, connection
+            pool utilization, CPU and memory saturation.
+          runbook: "RUNBOOK.md"
+
+  # --------------------------------------------------
+  # LEASE EVENT PROCESSING ALERTS
+  # --------------------------------------------------
+
+  - name: greenwheels_event_alerts
+    interval: 30s
+    rules:
+
+      - alert: GreenwheelsEventProcessingFailures
+        expr: |
+          greenwheels:events:success_ratio_rate30d < 0.995
+        for: 5m
+        labels:
+          severity: critical
+          service: greenwheels-api
+        annotations:
+          summary: "Lease event processing SLO is breached"
+          description: |
+            Fewer than 99.5% of non-duplicate lease event
+            ingestion attempts were successfully processed
+            over the rolling 30-day measurement window.
+            Investigate PostgreSQL availability, transaction
+            failures and application exceptions.
+          runbook: "RUNBOOK.md"
+
+      # Event ingestion latency SLO alert
+      - alert: GreenwheelsEventIngestionHighLatency
+        expr: |
+          greenwheels:events:latency_compliance_ratio_rate30d < 0.95
+        for: 10m
+        labels:
+          severity: warning
+          service: greenwheels-api
+        annotations:
+          summary: "Lease event ingestion latency SLO is breached"
+          description: |
+            Fewer than 95% of lease event ingestion attempts
+            completed within 500ms over the rolling 30-day
+            measurement window.
+            Investigate PostgreSQL query performance,
+            connection pool saturation and transaction locks.
+          runbook: "RUNBOOK.md"
+
+  # --------------------------------------------------
+  # PROMETHEUS TARGET HEALTH ALERTS
+  # --------------------------------------------------
+
+  - name: greenwheels_infrastructure_alerts
+    interval: 30s
+    rules:
+
+      - alert: GreenwheelsAPITargetDown
+        expr: |
+          up{job="greenwheels-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: greenwheels-api
+        annotations:
+          summary: "Greenwheels API metrics endpoint is unavailable"
+          description: |
+            Prometheus cannot scrape the Greenwheels API metrics
+            endpoint. Check API container health, port 8000,
+            Docker Compose networking and application logs.
+          runbook: "RUNBOOK.md"
+
+      - alert: GreenwheelsPrometheusTargetDown
+        expr: |
+          up{job="prometheus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: prometheus
+        annotations:
+          summary: "Prometheus self-monitoring target is unavailable"
+          description: |
+            Prometheus cannot scrape its own metrics endpoint.
+            Investigate Prometheus process health and port 9090.
+          runbook: "RUNBOOK.md"

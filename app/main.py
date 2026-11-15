@@ -1,4 +1,5 @@
 
+from contextlib import asynccontextmanager
 import time
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from prometheus_client import (
 
 from app.api.routes import router
 from app.core.config import settings
+from app.core.database import initialize_database
 from app.core.logging import configure_logging, logger
 from app.observability.metrics import (
     HTTP_REQUESTS,
@@ -24,10 +26,18 @@ from app.observability.metrics import (
 
 configure_logging()
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    initialize_database()
+    yield
+
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Fleet Lease Service API for Greenwheels",
+    lifespan=lifespan,
 )
 
 

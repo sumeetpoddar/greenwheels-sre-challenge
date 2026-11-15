@@ -1,24 +1,35 @@
 
-from fastapi import APIRouter, HTTPException, status
+import time
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
+from app.core.database import check_database_connection, get_db
+from app.core.logging import logger
 from app.models.lease import LeaseEvent
-from app.services.lease_service import (
-    DuplicateEventError,
-    LeaseService,
-)
 from app.observability.metrics import (
-    LEASE_EVENTS_RECEIVED,
-    LEASE_EVENTS_PROCESSED,
+    LEASE_EVENTS_DUPLICATE,
     LEASE_EVENTS_FAILED,
+    LEASE_EVENTS_PROCESSED,
+    LEASE_EVENTS_RECEIVED,
+    LEASE_EVENT_PROCESSING_DURATION,
 )
-
+from app.repositories.lease_repository import LeaseRepository
+from app.services.lease_service import DuplicateEventError, LeaseService
 
 router = APIRouter()
 
-# Temporary in-memory service instance.
-# This will be replaced with persistent storage later.
-lease_service = LeaseService()
+
+# --------------------------------------------------
+# DEPENDENCY INJECTION
+# --------------------------------------------------
+
+def get_lease_service(db: Session = Depends(get_db)) -> LeaseService:
+    """Create a request-scoped lease service."""
+
+    repository = LeaseRepository(db)
+    return LeaseService(repository)
 
 
 # --------------------------------------------------
@@ -26,42 +37,20 @@ lease_service = LeaseService()
 # --------------------------------------------------
 
 def check_liveness() -> bool:
-    """
-    Liveness probe.
+    """Check whether the application process is alive."""
 
-    Verifies that the application process is alive
-    and capable of responding.
-
-    Does not check external dependencies such as
-    PostgreSQL or Kafka.
-    """
     return True
 
 
 def check_readiness() -> bool:
-    """
-    Readiness probe.
+    """Check whether the application can access PostgreSQL."""
 
-    Verifies whether the application is ready
-    to accept incoming requests.
-
-    Currently, the application uses in-memory storage,
-    so no external dependency check is required.
-
-    PostgreSQL and other required dependency checks
-    will be added during infrastructure integration.
-    """
-    return True
+    return check_database_connection()
 
 
 @router.get("/health/live")
 def liveness_check():
-    """
-    Dedicated liveness endpoint.
-
-    Returns HTTP 200 when the application is alive.
-    Returns HTTP 503 when the application is unhealthy.
-    """
+    """Kubernetes liveness probe."""
 
     live = check_liveness()
 
@@ -71,20 +60,13 @@ def liveness_check():
             if live
             else status.HTTP_503_SERVICE_UNAVAILABLE
         ),
-        content={
-            "status": "healthy" if live else "unhealthy"
-        },
+        content={"status": "healthy" if live else "unhealthy"},
     )
 
 
 @router.get("/health/ready")
 def readiness_check():
-    """
-    Dedicated readiness endpoint.
-
-    Returns HTTP 200 when the application can serve traffic.
-    Returns HTTP 503 when the application is not ready.
-    """
+    """Kubernetes readiness probe."""
 
     ready = check_readiness()
 
@@ -94,19 +76,13 @@ def readiness_check():
             if ready
             else status.HTTP_503_SERVICE_UNAVAILABLE
         ),
-        content={
-            "status": "ready" if ready else "not_ready"
-        },
+        content={"status": "ready" if ready else "not_ready"},
     )
 
 
 @router.get("/health")
 def health_check():
-    """
-    Combined health endpoint required by the case study.
-
-    Reports both liveness and readiness status.
-    """
+    """Combined application health check."""
 
     live = check_liveness()
     ready = check_readiness()
@@ -122,12 +98,8 @@ def health_check():
         content={
             "status": "healthy" if healthy else "unhealthy",
             "checks": {
-                "liveness": (
-                    "healthy" if live else "unhealthy"
-                ),
-                "readiness": (
-                    "ready" if ready else "not_ready"
-                ),
+                "liveness": "healthy" if live else "unhealthy",
+                "readiness": "ready" if ready else "not_ready",
             },
         },
     )
@@ -141,40 +113,104 @@ def health_check():
     "/leases/events",
     status_code=status.HTTP_202_ACCEPTED,
 )
-def ingest_lease_event(event: LeaseEvent):
+def ingest_lease_event(
+    event: LeaseEvent,
+    request: Request,
+    lease_service: LeaseService = Depends(get_lease_service),
+):
     """
-    Accept and ingest a lease event.
+    Ingest a lease event and record structured logs and metrics.
 
-    Duplicate event IDs are rejected with HTTP 409.
+    Duplicate events are expected idempotency conflicts.
+    Unexpected exceptions are counted as processing failures.
     """
+
+    request_id = getattr(request.state, "request_id", "unknown")
+    start_time = time.perf_counter()
 
     LEASE_EVENTS_RECEIVED.inc()
 
     try:
         result = lease_service.ingest_event(event)
 
+        latency_ms = round(
+            (time.perf_counter() - start_time) * 1000,
+            2,
+        )
+
         LEASE_EVENTS_PROCESSED.inc()
+
+        logger.info(
+            "Lease event processed successfully",
+            extra={
+                "request_id": request_id,
+                "driver_id": event.driver_id,
+                "event_type": event.event_type.value,
+                "latency_ms": latency_ms,
+            },
+        )
 
         return result
 
     except DuplicateEventError as exc:
-        LEASE_EVENTS_FAILED.inc()
+        latency_ms = round(
+            (time.perf_counter() - start_time) * 1000,
+            2,
+        )
+
+        LEASE_EVENTS_DUPLICATE.inc()
+
+        logger.warning(
+            "Duplicate lease event rejected",
+            extra={
+                "request_id": request_id,
+                "driver_id": event.driver_id,
+                "event_type": event.event_type.value,
+                "latency_ms": latency_ms,
+            },
+        )
 
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
 
+    except Exception:
+        latency_ms = round(
+            (time.perf_counter() - start_time) * 1000,
+            2,
+        )
+
+        LEASE_EVENTS_FAILED.inc()
+
+        logger.exception(
+            "Lease event processing failed",
+            extra={
+                "request_id": request_id,
+                "driver_id": event.driver_id,
+                "event_type": event.event_type.value,
+                "latency_ms": latency_ms,
+            },
+        )
+
+        raise
+
+    finally:
+        processing_duration = time.perf_counter() - start_time
+
+        LEASE_EVENT_PROCESSING_DURATION.observe(processing_duration)
+
 
 # --------------------------------------------------
-# GET CURRENT LEASE STATUS
+# LEASE STATUS LOOKUP
 # --------------------------------------------------
 
 @router.get("/leases/{driver_id}")
-def get_lease_status(driver_id: str):
-    """
-    Retrieve the current lease status for a driver.
-    """
+def get_lease_status(
+    driver_id: str,
+    lease_service: LeaseService = Depends(get_lease_service),
+):
+    """Retrieve the current lease projection for a driver."""
 
     lease = lease_service.get_lease(driver_id)
 

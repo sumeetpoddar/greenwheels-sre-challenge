@@ -1,0 +1,39 @@
+
+# --------------------------------------------------
+# PROMETHEUS GLOBAL CONFIGURATION
+# --------------------------------------------------
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+  scrape_timeout: 10s
+
+# --------------------------------------------------
+# RECORDING AND ALERTING RULE FILES
+# --------------------------------------------------
+
+rule_files:
+  - /etc/prometheus/recording_rules.yml
+  - /etc/prometheus/alerting_rules.yml
+
+# --------------------------------------------------
+# SCRAPE CONFIGURATIONS
+# --------------------------------------------------
+
+scrape_configs:
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+  # Greenwheels FastAPI application
+  - job_name: greenwheels-api
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - api:8000
+        labels:
+          application: greenwheels-lease-service
+          environment: local
