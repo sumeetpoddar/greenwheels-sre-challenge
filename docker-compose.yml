@@ -94,6 +94,42 @@ services:
         condition: service_healthy
 
   # --------------------------------------------------
+  # HEALTH PROBE EXPORTER
+  # --------------------------------------------------
+  blackbox-exporter:
+    image: prom/blackbox-exporter:latest
+    container_name: greenwheels-blackbox-exporter
+    restart: unless-stopped
+
+    volumes:
+      - ./monitoring/blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+
+    command:
+      - "--config.file=/etc/blackbox_exporter/config.yml"
+
+  # --------------------------------------------------
+  # ALERTMANAGER (OPTIONAL SLACK NOTIFICATIONS)
+  # --------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: greenwheels-alertmanager
+    restart: unless-stopped
+    profiles:
+      - notifications
+
+    ports:
+      - "127.0.0.1:9093:9093"
+
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./.secrets/slack_webhook_url:/run/secrets/slack_webhook_url:ro
+      - alertmanager_data:/alertmanager
+
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+
+  # --------------------------------------------------
   # GRAFANA DASHBOARDS
   # --------------------------------------------------
   grafana:
@@ -125,6 +161,9 @@ volumes:
 
   prometheus_data:
     name: greenwheels-prometheus-data
+
+  alertmanager_data:
+    name: greenwheels-alertmanager-data
 
   grafana_data:
     name: greenwheels-grafana-data

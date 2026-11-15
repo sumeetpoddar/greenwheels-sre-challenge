@@ -1,0 +1,24 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: greenwheels-slack
+  group_by:
+    - alertname
+    - service
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: greenwheels-slack
+    slack_configs:
+      - api_url_file: /run/secrets/slack_webhook_url
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        text: >-
+          *Severity:* {{ .CommonLabels.severity }}
+          *Service:* {{ .CommonLabels.service }}
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Details:* {{ .CommonAnnotations.description }}
+          *Runbook:* {{ .CommonAnnotations.runbook_url }}

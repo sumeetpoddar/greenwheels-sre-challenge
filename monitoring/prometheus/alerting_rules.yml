@@ -7,6 +7,40 @@ groups:
     interval: 30s
     rules:
 
+      - alert: GreenwheelsLeaseEventsHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{
+              job="greenwheels-api",
+              endpoint="/leases/events",
+              status_code=~"5.."
+            }[5m]))
+            /
+            sum(rate(http_requests_total{
+              job="greenwheels-api",
+              endpoint="/leases/events"
+            }[5m]))
+          ) > 0.05
+          and
+          sum(increase(http_requests_total{
+            job="greenwheels-api",
+            endpoint="/leases/events"
+          }[5m])) >= 5
+        for: 2m
+        labels:
+          severity: critical
+          service: greenwheels-api
+          notification_channel: slack
+        annotations:
+          summary: "Lease event endpoint has an elevated 5xx rate"
+          description: |
+            At least 5 lease-event requests occurred in the last 5 minutes
+            and more than 5% returned HTTP 5xx for 2 minutes. Check API logs,
+            PostgreSQL connectivity and connection availability; preserve
+            affected event IDs and retry only with the same event ID after
+            recovery.
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md#scenario-a--lease-event-processing-backlog"
+
       # Short-window alert for immediate incident detection
       - alert: GreenwheelsAPIHigh5xxRate
         expr: |
@@ -24,6 +58,7 @@ groups:
         labels:
           severity: critical
           service: greenwheels-api
+          notification_channel: slack
         annotations:
           summary: "Greenwheels API has a high 5xx error rate"
           description: |
@@ -31,7 +66,7 @@ groups:
             responses over the last 5 minutes, sustained for
             5 minutes. Investigate application logs, PostgreSQL
             connectivity, resource saturation and recent deployments.
-          runbook: "RUNBOOK.md"
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md"
 
       # Rolling 30-day availability SLO alert
       - alert: GreenwheelsAPIHighErrorRate
@@ -43,6 +78,7 @@ groups:
         labels:
           severity: critical
           service: greenwheels-api
+          notification_channel: slack
         annotations:
           summary: "Greenwheels API availability SLO is breached"
           description: |
@@ -50,7 +86,7 @@ groups:
             threshold over the rolling 30-day measurement window.
             Investigate HTTP 5xx responses, application logs,
             database connectivity and recent deployments.
-          runbook: "RUNBOOK.md"
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md#scenario-b--database-connection-pool-exhaustion"
 
       # --------------------------------------------------
       # API LATENCY ALERT
@@ -63,15 +99,16 @@ groups:
         labels:
           severity: warning
           service: greenwheels-api
+          notification_channel: slack
         annotations:
           summary: "Greenwheels API latency SLO is breached"
           description: |
             Fewer than 95% of API requests completed within
             the 300ms latency objective over the rolling
-            30-day measurement window.
-            Investigate database query latency, connection
-            pool utilization, CPU and memory saturation.
-          runbook: "RUNBOOK.md"
+            30-day measurement window. Check request latency, API logs,
+            PostgreSQL query latency and pool utilization. Mitigate the
+            bottleneck before scaling API concurrency.
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md#scenario-b--database-connection-pool-exhaustion"
 
   # --------------------------------------------------
   # LEASE EVENT PROCESSING ALERTS
@@ -88,6 +125,7 @@ groups:
         labels:
           severity: critical
           service: greenwheels-api
+          notification_channel: slack
         annotations:
           summary: "Lease event processing SLO is breached"
           description: |
@@ -96,7 +134,7 @@ groups:
             over the rolling 30-day measurement window.
             Investigate PostgreSQL availability, transaction
             failures and application exceptions.
-          runbook: "RUNBOOK.md"
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md#scenario-a--lease-event-processing-backlog"
 
       # Event ingestion latency SLO alert
       - alert: GreenwheelsEventIngestionHighLatency
@@ -106,6 +144,7 @@ groups:
         labels:
           severity: warning
           service: greenwheels-api
+          notification_channel: slack
         annotations:
           summary: "Lease event ingestion latency SLO is breached"
           description: |
@@ -114,7 +153,7 @@ groups:
             measurement window.
             Investigate PostgreSQL query performance,
             connection pool saturation and transaction locks.
-          runbook: "RUNBOOK.md"
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md#scenario-b--database-connection-pool-exhaustion"
 
   # --------------------------------------------------
   # PROMETHEUS TARGET HEALTH ALERTS
@@ -124,6 +163,41 @@ groups:
     interval: 30s
     rules:
 
+      - alert: GreenwheelsServiceHealthFailure
+        expr: |
+          probe_success{job="greenwheels-health"} == 0
+          or
+          up{job="greenwheels-health"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: greenwheels-api
+          notification_channel: slack
+        annotations:
+          summary: "Greenwheels API readiness check is failing"
+          description: |
+            The external probe could not get a healthy response from
+            /health. This endpoint checks PostgreSQL readiness as well as
+            API liveness. Check API and PostgreSQL container health, logs,
+            and database connectivity before restarting services.
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md#scenario-b--database-connection-pool-exhaustion"
+
+      - alert: GreenwheelsHealthProbeUnavailable
+        expr: up{job="blackbox-exporter"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: blackbox-exporter
+          notification_channel: slack
+        annotations:
+          summary: "Greenwheels health probe exporter is unavailable"
+          description: |
+            Prometheus cannot scrape the blackbox exporter, so the API
+            readiness probe is not providing a trustworthy health signal.
+            Check the exporter container and its configuration, then verify
+            the greenwheels-health target recovers.
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md"
+
       - alert: GreenwheelsAPITargetDown
         expr: |
           up{job="greenwheels-api"} == 0
@@ -131,13 +205,14 @@ groups:
         labels:
           severity: critical
           service: greenwheels-api
+          notification_channel: slack
         annotations:
           summary: "Greenwheels API metrics endpoint is unavailable"
           description: |
             Prometheus cannot scrape the Greenwheels API metrics
             endpoint. Check API container health, port 8000,
             Docker Compose networking and application logs.
-          runbook: "RUNBOOK.md"
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md#scenario-b--database-connection-pool-exhaustion"
 
       - alert: GreenwheelsPrometheusTargetDown
         expr: |
@@ -146,9 +221,10 @@ groups:
         labels:
           severity: critical
           service: prometheus
+          notification_channel: slack
         annotations:
           summary: "Prometheus self-monitoring target is unavailable"
           description: |
             Prometheus cannot scrape its own metrics endpoint.
             Investigate Prometheus process health and port 9090.
-          runbook: "RUNBOOK.md"
+          runbook_url: "https://github.com/sumeetpoddar/greenwheels-sre-challenge/blob/main/RUNBOOK.md"

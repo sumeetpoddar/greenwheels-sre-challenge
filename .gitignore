@@ -10,6 +10,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+.secrets/
 
 # Testing and linting cache
 .pytest_cache/

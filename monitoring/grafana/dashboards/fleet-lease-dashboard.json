@@ -171,6 +171,77 @@
           "mode": "single"
         }
       }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "API readiness",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "probe_success{job=\"greenwheels-health\"}",
+          "legendFormat": "API /health"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "UNHEALTHY",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "HEALTHY",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      }
     }
   ]
 }

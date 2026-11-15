@@ -20,6 +20,15 @@ with Docker Desktop running. Production Kubernetes, Kafka, and AWS commands
 below are examples: adapt cluster, namespace, topic, consumer-group, and region
 names to the deployed environment.
 
+Prometheus alert rules are in `monitoring/prometheus/alerting_rules.yml`.
+When the Compose `notifications` profile is enabled, Alertmanager groups
+alerts and sends firing/resolved notifications to the configured Slack
+Incoming Webhook. Follow the README instructions to create the ignored local
+webhook secret file; never commit the webhook URL. If notifications do not
+arrive, check the `alertmanager` and `blackbox-exporter` containers, the
+Prometheus `Alerts` and `Targets` pages, and Alertmanager's status at
+`http://localhost:9093`.
+
 ---
 
 ## Scenario A — Lease event processing backlog
