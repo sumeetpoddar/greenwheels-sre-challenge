@@ -35,6 +35,8 @@ To follow startup logs:
 docker compose logs -f api postgres
 ```
 
+For incident triage steps, see [RUNBOOK.md](./RUNBOOK.md).
+
 Stop the services without deleting persistent data:
 
 ```powershell
