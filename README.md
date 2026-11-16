@@ -4,6 +4,14 @@ FastAPI service for recording lease events and serving each driver's current
 lease projection. PostgreSQL stores the event history and projection;
 Prometheus and Grafana provide metrics and dashboards.
 
+## Architecture
+
+![Greenwheels service and observability architecture](docs/images/greenwheels-architecture.svg)
+
+Alertmanager and Slack notifications are optional and require local webhook
+configuration. Kafka, ECS, RDS, and Redis are described as future scale-design
+options, not as components in the current Compose deployment.
+
 ## Run the full stack
 
 Requirements: Docker Desktop with Docker Compose enabled.
